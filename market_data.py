@@ -6,6 +6,7 @@ import os
 import time
 import json
 import random
+import logging
 from datetime import datetime, time as dt_time
 from typing import Dict, List, Optional, Tuple
 
@@ -16,6 +17,9 @@ try:
     import config as app_config
 except ImportError:  # pragma: no cover
     import config_example as app_config
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class MarketDataFetcher:
@@ -64,7 +68,7 @@ class MarketDataFetcher:
                 'base_url': 'https://min-api.cryptocompare.com/data',
                 'enabled': True,
                 'priority': 4,
-                'min_interval': 0.2,  # 0.2 seconds
+                'min_interval': 1,  # 1 seconds
                 'last_request_time': 0,
                 'timeout': 10,
                 'max_retries': 2
@@ -110,11 +114,34 @@ class MarketDataFetcher:
             }
             self.sessions[api_name] = session
 
+    def _log_api_error(self, api_name: str, scenario: str, error_type: str, 
+                       symbol: str = None, error_msg: str = "", level: str = "WARN"):
+        """
+        统一的API错误日志格式
+        
+        Args:
+            api_name: API名称 (binance, coingecko, coincap, cryptocompare等)
+            scenario: 使用场景 (实时价格, 历史价格, 技术指标, 数据持久化等)
+            error_type: 错误类型 (连接错误, 限流错误, 请求错误, 解析错误, 其他错误)
+            symbol: 币种符号 (可选)
+            error_msg: 错误详细信息
+            level: 日志级别 (WARN, ERROR, INFO)
+        """
+        symbol_str = f"[币种:{symbol}]" if symbol else ""
+        log_msg = f"[API:{api_name.upper()}][场景:{scenario}]{symbol_str}[错误类型:{error_type}] {error_msg}"
+        
+        if level == "ERROR":
+            logger.error(log_msg)
+        elif level == "INFO":
+            logger.info(log_msg)
+        else:
+            logger.warning(log_msg)
+
     def _get_configured_coins(self) -> List[Dict]:
         """Get configured coins from database"""
         coins = self.db.get_coin_configs()
         if not coins:
-            print('[WARN] No coins configured. Please add coins via configuration UI.')
+            logger.warning('[配置] 未配置任何币种，请通过配置界面添加币种')
         return coins
 
     def _parse_time_setting(self, value: str) -> dt_time:
@@ -179,7 +206,13 @@ class MarketDataFetcher:
             try:
                 self.db.upsert_daily_price(symbol, float(price), price_date)
             except Exception as err:
-                print(f'[WARN] Failed to persist closing price for {symbol}: {err}')
+                self._log_api_error(
+                    api_name="数据库",
+                    scenario="数据持久化",
+                    error_type="持久化错误",
+                    symbol=symbol,
+                    error_msg=f"保存收盘价失败: {str(err)}"
+                )
 
     def get_prices(self, symbols: Optional[List[str]] = None) -> Dict[str, Dict]:
         """Return prices respecting configured trading hours"""
@@ -221,7 +254,13 @@ class MarketDataFetcher:
                     try:
                         self.db.upsert_daily_price(symbol, float(payload.get('price', 0)), price_date)
                     except Exception as err:
-                        print(f'[WARN] Failed to persist fallback price for {symbol}: {err}')
+                        self._log_api_error(
+                            api_name="数据库",
+                            scenario="数据持久化",
+                            error_type="持久化错误",
+                            symbol=symbol,
+                            error_msg=f"保存回退价格失败: {str(err)}"
+                        )
                 self._last_live_date = now.date()
 
         # Fallback to most recent live snapshot if still no data
@@ -307,15 +346,46 @@ class MarketDataFetcher:
                             self._update_api_health(api_name, True)
                             break
                 except (SSLError, ConnectionError, ProxyError) as e:
-                    print(f'[WARN] Binance connection error for {binance_symbol}: {str(e)[:100]}')
+                    # 从binance_symbol提取币种符号 (例如: BTCUSDT -> BTC)
+                    coin_symbol = binance_symbol.replace('USDT', '') if 'USDT' in binance_symbol else binance_symbol
+                    self._log_api_error(
+                        api_name="binance",
+                        scenario="实时价格",
+                        error_type="连接错误",
+                        symbol=coin_symbol,
+                        error_msg=f"SSL/连接/代理错误: {str(e)[:200]}"
+                    )
+                    self._update_api_health(api_name, False)
+                    continue
+                except requests.exceptions.HTTPError as e:
+                    coin_symbol = binance_symbol.replace('USDT', '') if 'USDT' in binance_symbol else binance_symbol
+                    self._log_api_error(
+                        api_name="binance",
+                        scenario="实时价格",
+                        error_type="HTTP错误",
+                        symbol=coin_symbol,
+                        error_msg=f"HTTP状态码: {e.response.status_code if hasattr(e, 'response') else 'unknown'}, {str(e)[:200]}"
+                    )
                     self._update_api_health(api_name, False)
                     continue
                 except Exception as e:
-                    print(f'[WARN] Binance error for {binance_symbol}: {str(e)[:100]}')
+                    coin_symbol = binance_symbol.replace('USDT', '') if 'USDT' in binance_symbol else binance_symbol
+                    self._log_api_error(
+                        api_name="binance",
+                        scenario="实时价格",
+                        error_type="其他错误",
+                        symbol=coin_symbol,
+                        error_msg=f"未知错误: {str(e)[:200]}"
+                    )
                     self._update_api_health(api_name, False)
                     continue
         except Exception as e:
-            print(f'[WARN] Binance API failed: {str(e)[:100]}')
+            self._log_api_error(
+                api_name="binance",
+                scenario="实时价格",
+                error_type="API调用失败",
+                error_msg=f"整体API调用失败: {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
 
         return prices
@@ -346,7 +416,14 @@ class MarketDataFetcher:
             )
             
             if response.status_code == 429:
-                print(f'[WARN] CoinGecko rate limit hit')
+                coin_symbols = ','.join([coin['symbol'] for coin in coins])
+                self._log_api_error(
+                    api_name="coingecko",
+                    scenario="实时价格",
+                    error_type="限流错误",
+                    symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                    error_msg="触发API限流 (429)"
+                )
                 self._update_api_health(api_name, False)
                 return prices
             
@@ -364,10 +441,34 @@ class MarketDataFetcher:
                         'change_24h': data[coin_id].get('usd_24h_change', 0)
                     }
         except (RequestException, ProxyError, ConnectionError) as e:
-            print(f'[WARN] CoinGecko error: {str(e)[:100]}')
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="coingecko",
+                scenario="实时价格",
+                error_type="连接错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"请求/代理/连接错误: {str(e)[:200]}"
+            )
+            self._update_api_health(api_name, False)
+        except requests.exceptions.HTTPError as e:
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="coingecko",
+                scenario="实时价格",
+                error_type="HTTP错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"HTTP状态码: {e.response.status_code if hasattr(e, 'response') else 'unknown'}, {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
         except Exception as e:
-            print(f'[WARN] CoinGecko failed: {str(e)[:100]}')
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="coingecko",
+                scenario="实时价格",
+                error_type="其他错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"未知错误: {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
 
         return prices
@@ -405,6 +506,14 @@ class MarketDataFetcher:
                     )
                     
                     if response.status_code == 429:
+                        self._log_api_error(
+                            api_name="coincap",
+                            scenario="实时价格",
+                            error_type="限流错误",
+                            symbol=coin['symbol'],
+                            error_msg="触发API限流 (429)"
+                        )
+                        self._update_api_health(api_name, False)
                         continue
                     
                     response.raise_for_status()
@@ -419,11 +528,43 @@ class MarketDataFetcher:
                             'change_24h': float(asset.get('changePercent24Hr', 0))
                         }
                         self._update_api_health(api_name, True)
+                except requests.exceptions.HTTPError as e:
+                    self._log_api_error(
+                        api_name="coincap",
+                        scenario="实时价格",
+                        error_type="HTTP错误",
+                        symbol=coin['symbol'],
+                        error_msg=f"HTTP状态码: {e.response.status_code if hasattr(e, 'response') else 'unknown'}, {str(e)[:200]}"
+                    )
+                    self._update_api_health(api_name, False)
+                    continue
+                except (RequestException, ProxyError, ConnectionError) as e:
+                    self._log_api_error(
+                        api_name="coincap",
+                        scenario="实时价格",
+                        error_type="连接错误",
+                        symbol=coin['symbol'],
+                        error_msg=f"请求/代理/连接错误: {str(e)[:200]}"
+                    )
+                    self._update_api_health(api_name, False)
+                    continue
                 except Exception as e:
+                    self._log_api_error(
+                        api_name="coincap",
+                        scenario="实时价格",
+                        error_type="其他错误",
+                        symbol=coin['symbol'],
+                        error_msg=f"未知错误: {str(e)[:200]}"
+                    )
                     self._update_api_health(api_name, False)
                     continue
         except Exception as e:
-            print(f'[WARN] CoinCap failed: {str(e)[:100]}')
+            self._log_api_error(
+                api_name="coincap",
+                scenario="实时价格",
+                error_type="API调用失败",
+                error_msg=f"整体API调用失败: {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
 
         return prices
@@ -451,7 +592,14 @@ class MarketDataFetcher:
             )
             
             if response.status_code == 429:
-                print(f'[WARN] CryptoCompare rate limit hit')
+                coin_symbols = ','.join([coin['symbol'] for coin in coins])
+                self._log_api_error(
+                    api_name="cryptocompare",
+                    scenario="实时价格",
+                    error_type="限流错误",
+                    symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                    error_msg="触发API限流 (429)"
+                )
                 self._update_api_health(api_name, False)
                 return prices
             
@@ -471,10 +619,34 @@ class MarketDataFetcher:
                         'change_24h': float(usd_data.get('CHANGEPCT24HOUR', 0))
                     }
         except (RequestException, ProxyError, ConnectionError) as e:
-            print(f'[WARN] CryptoCompare error: {str(e)[:100]}')
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="cryptocompare",
+                scenario="实时价格",
+                error_type="连接错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"请求/代理/连接错误: {str(e)[:200]}"
+            )
+            self._update_api_health(api_name, False)
+        except requests.exceptions.HTTPError as e:
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="cryptocompare",
+                scenario="实时价格",
+                error_type="HTTP错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"HTTP状态码: {e.response.status_code if hasattr(e, 'response') else 'unknown'}, {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
         except Exception as e:
-            print(f'[WARN] CryptoCompare failed: {str(e)[:100]}')
+            coin_symbols = ','.join([coin['symbol'] for coin in coins])
+            self._log_api_error(
+                api_name="cryptocompare",
+                scenario="实时价格",
+                error_type="其他错误",
+                symbol=coin_symbols if len(coins) <= 3 else f"{len(coins)}个币种",
+                error_msg=f"未知错误: {str(e)[:200]}"
+            )
             self._update_api_health(api_name, False)
 
         return prices
@@ -528,7 +700,14 @@ class MarketDataFetcher:
                         missing_coins = [c for c in missing_coins if c['symbol'] != symbol]
 
             except Exception as e:
-                print(f'[WARN] {api_name} fetch failed: {str(e)[:100]}')
+                coin_symbols = ','.join([coin['symbol'] for coin in missing_coins])
+                self._log_api_error(
+                    api_name=api_name,
+                    scenario="实时价格",
+                    error_type="API调用失败",
+                    symbol=coin_symbols if len(missing_coins) <= 3 else f"{len(missing_coins)}个币种",
+                    error_msg=f"获取价格失败: {str(e)[:200]}"
+                )
                 continue
 
         # Set default values for failed coins (use last known price if available)
@@ -565,7 +744,14 @@ class MarketDataFetcher:
                 'low_24h': price_info.get('price', 0)
             }
         except Exception as e:
-            print(f'[ERROR] Failed to get market data for {symbol}: {e}')
+            self._log_api_error(
+                api_name="市场数据",
+                scenario="市场数据获取",
+                error_type="数据获取错误",
+                symbol=symbol,
+                error_msg=f"获取市场数据失败: {str(e)[:200]}",
+                level="ERROR"
+            )
             return {}
 
     def get_historical_prices(self, symbol: str, count: int = 60) -> List[Dict]:
@@ -602,7 +788,14 @@ class MarketDataFetcher:
                 )
                 
                 if response.status_code == 429:
-                    print(f'[WARN] CoinGecko rate limit for {symbol}, using cache if available')
+                    self._log_api_error(
+                        api_name="coingecko",
+                        scenario="历史价格",
+                        error_type="限流错误",
+                        symbol=symbol,
+                        error_msg=f"触发API限流 (429), 尝试使用缓存数据"
+                    )
+                    self._update_api_health(api_name, False)
                     if cache_key in self._historical_cache:
                         return self._historical_cache[cache_key]['data']
                     return []
@@ -625,13 +818,36 @@ class MarketDataFetcher:
 
                 return prices
             except (RequestException, ProxyError, ConnectionError) as e:
-                print(f'[WARN] CoinGecko historical error for {symbol}: {str(e)[:100]}')
+                self._log_api_error(
+                    api_name="coingecko",
+                    scenario="历史价格",
+                    error_type="连接错误",
+                    symbol=symbol,
+                    error_msg=f"请求/代理/连接错误: {str(e)[:200]}, 尝试使用缓存数据"
+                )
                 self._update_api_health(api_name, False)
                 # Return cached data if available
                 if cache_key in self._historical_cache:
                     return self._historical_cache[cache_key]['data']
+            except requests.exceptions.HTTPError as e:
+                self._log_api_error(
+                    api_name="coingecko",
+                    scenario="历史价格",
+                    error_type="HTTP错误",
+                    symbol=symbol,
+                    error_msg=f"HTTP状态码: {e.response.status_code if hasattr(e, 'response') else 'unknown'}, {str(e)[:200]}, 尝试使用缓存数据"
+                )
+                self._update_api_health(api_name, False)
+                if cache_key in self._historical_cache:
+                    return self._historical_cache[cache_key]['data']
             except Exception as e:
-                print(f'[WARN] CoinGecko historical failed for {symbol}: {str(e)[:100]}')
+                self._log_api_error(
+                    api_name="coingecko",
+                    scenario="历史价格",
+                    error_type="其他错误",
+                    symbol=symbol,
+                    error_msg=f"未知错误: {str(e)[:200]}, 尝试使用缓存数据"
+                )
                 if cache_key in self._historical_cache:
                     return self._historical_cache[cache_key]['data']
 
@@ -639,37 +855,63 @@ class MarketDataFetcher:
 
     def calculate_technical_indicators(self, symbol: str) -> Dict:
         """Calculate technical indicators for a coin"""
-        history = self.get_historical_prices(symbol, count=336)
-        if not history:
+        try:
+            history = self.get_historical_prices(symbol, count=336)
+            if not history:
+                self._log_api_error(
+                    api_name="技术指标",
+                    scenario="技术指标计算",
+                    error_type="数据不足",
+                    symbol=symbol,
+                    error_msg="无法获取历史价格数据，无法计算技术指标"
+                )
+                return {}
+
+            prices = [item['price'] for item in history]
+            if len(prices) < 14:
+                self._log_api_error(
+                    api_name="技术指标",
+                    scenario="技术指标计算",
+                    error_type="数据不足",
+                    symbol=symbol,
+                    error_msg=f"历史价格数据点不足 (需要至少14个，实际{len(prices)}个)，无法计算RSI等指标"
+                )
+                return {}
+
+            # 计算技术指标
+            sma_5 = sum(prices[-5:]) / 5 if len(prices) >= 5 else prices[-1]
+            sma_20 = sum(prices[-20:]) / 20 if len(prices) >= 20 else sum(prices) / len(prices)
+
+            changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+            gains = [change if change > 0 else 0 for change in changes]
+            losses = [-change if change < 0 else 0 for change in changes]
+            avg_gain = sum(gains[-14:]) / 14 if len(gains) >= 14 else (sum(gains) / len(gains) if gains else 0)
+            avg_loss = sum(losses[-14:]) / 14 if len(losses) >= 14 else (sum(losses) / len(losses) if losses else 0)
+
+            if avg_loss == 0:
+                rsi = 100
+            else:
+                rs = avg_gain / avg_loss
+                rsi = 100 - (100 / (1 + rs))
+
+            pct_change_5 = ((prices[-1] - prices[-5]) / prices[-5]) * 100 if len(prices) >= 5 and prices[-5] else 0
+            pct_change_20 = ((prices[-1] - prices[-20]) / prices[-20]) * 100 if len(prices) >= 20 and prices[-20] else 0
+
+            return {
+                'sma_5': sma_5,
+                'sma_20': sma_20,
+                'rsi_14': rsi,
+                'change_5d': pct_change_5,
+                'change_20d': pct_change_20,
+                'current_price': prices[-1]
+            }
+        except Exception as e:
+            self._log_api_error(
+                api_name="技术指标",
+                scenario="技术指标计算",
+                error_type="计算错误",
+                symbol=symbol,
+                error_msg=f"计算技术指标时发生错误: {str(e)[:200]}",
+                level="ERROR"
+            )
             return {}
-
-        prices = [item['price'] for item in history]
-        if len(prices) < 14:
-            return {}
-
-        sma_5 = sum(prices[-5:]) / 5 if len(prices) >= 5 else prices[-1]
-        sma_20 = sum(prices[-20:]) / 20 if len(prices) >= 20 else sum(prices) / len(prices)
-
-        changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
-        gains = [change if change > 0 else 0 for change in changes]
-        losses = [-change if change < 0 else 0 for change in changes]
-        avg_gain = sum(gains[-14:]) / 14 if len(gains) >= 14 else (sum(gains) / len(gains) if gains else 0)
-        avg_loss = sum(losses[-14:]) / 14 if len(losses) >= 14 else (sum(losses) / len(losses) if losses else 0)
-
-        if avg_loss == 0:
-            rsi = 100
-        else:
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-
-        pct_change_5 = ((prices[-1] - prices[-5]) / prices[-5]) * 100 if len(prices) >= 5 and prices[-5] else 0
-        pct_change_20 = ((prices[-1] - prices[-20]) / prices[-20]) * 100 if len(prices) >= 20 and prices[-20] else 0
-
-        return {
-            'sma_5': sma_5,
-            'sma_20': sma_20,
-            'rsi_14': rsi,
-            'change_5d': pct_change_5,
-            'change_20d': pct_change_20,
-            'current_price': prices[-1]
-        }

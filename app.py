@@ -21,7 +21,40 @@ app = Flask(__name__)
 CORS(app)
 
 import logging
+import sys
+
+# 从配置读取日志级别
+def get_log_level():
+    """从配置获取日志级别，默认为 INFO"""
+    log_level_str = getattr(app_config, 'LOG_LEVEL', 'INFO').upper()
+    log_level_map = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    return log_level_map.get(log_level_str, logging.INFO)
+
+# 从配置读取日志格式
+log_format = getattr(app_config, 'LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_date_format = getattr(app_config, 'LOG_DATE_FORMAT', '%Y-%m-%d %H:%M:%S')
+
+# 配置日志系统
+logging.basicConfig(
+    level=get_log_level(),
+    format=log_format,
+    datefmt=log_date_format,
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# 设置 werkzeug 日志级别为 WARNING（减少 Flask 的请求日志）
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
+# 创建应用日志器
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = 'trading_bot.db'
 env_db_path = os.getenv('DATABASE_PATH')
@@ -61,7 +94,7 @@ def init_trading_engine_for_model(model_id: int):
 def get_tracked_symbols():
     symbols = db.get_coin_symbols()
     if not symbols:
-        print('[WARN] No coins configured. Please add coins via /api/coins.')
+        logger.warning('No coins configured. Please add coins via /api/coins.')
     return symbols
 
 def get_trading_interval_seconds() -> int:
@@ -72,7 +105,7 @@ def get_trading_interval_seconds() -> int:
         settings = db.get_settings()
         minutes = int(settings.get('trading_frequency_minutes', default_minutes))
     except Exception as e:
-        print(f"[WARN] Unable to load trading frequency setting: {e}")
+        logger.warning(f"Unable to load trading frequency setting: {e}")
         minutes = default_minutes
 
     minutes = max(1, min(1440, minutes))
@@ -159,7 +192,7 @@ def fetch_provider_models():
 
         return jsonify({'models': models})
     except Exception as e:
-        print(f"[ERROR] Fetch models failed: {e}")
+        logger.error(f"Fetch models failed: {e}")
         return jsonify({'error': f'Failed to fetch models: {str(e)}'}), 500
 
 # ============ Coin Configuration Endpoints ============
@@ -239,12 +272,12 @@ def add_model():
             ),
             trade_fee_rate=TRADE_FEE_RATE  # 新增：传入费率
         )
-        print(f"[INFO] Model {model_id} ({data['name']}) initialized")
+        logger.info(f"Model {model_id} ({data['name']}) initialized")
 
         return jsonify({'id': model_id, 'message': 'Model added successfully'})
 
     except Exception as e:
-        print(f"[ERROR] Failed to add model: {e}")
+        logger.error(f"Failed to add model: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models/<int:model_id>', methods=['DELETE'])
@@ -257,10 +290,10 @@ def delete_model(model_id):
         if model_id in trading_engines:
             del trading_engines[model_id]
         
-        print(f"[INFO] Model {model_id} ({model_name}) deleted")
+        logger.info(f"Model {model_id} ({model_name}) deleted")
         return jsonify({'message': 'Model deleted successfully'})
     except Exception as e:
-        print(f"[ERROR] Delete model {model_id} failed: {e}")
+        logger.error(f"Delete model {model_id} failed: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models/<int:model_id>/portfolio', methods=['GET'])
@@ -420,7 +453,7 @@ def set_model_auto_trading(model_id):
     return jsonify({'model_id': model_id, 'auto_trading_enabled': enabled})
 
 def trading_loop():
-    print("[INFO] Trading loop started")
+    logger.info("Trading loop started")
     
     while auto_trading:
         try:
@@ -428,55 +461,55 @@ def trading_loop():
                 time.sleep(30)
                 continue
             
-            print(f"\n{'='*60}")
-            print(f"[CYCLE] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"[INFO] Active models: {len(trading_engines)}")
-            print(f"{'='*60}")
+            logger.info(f"\n{'='*60}")
+            logger.info(f"CYCLE: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"Active models: {len(trading_engines)}")
+            logger.info(f"{'='*60}")
             
             for model_id, engine in list(trading_engines.items()):
                 try:
                     if not db.is_model_auto_trading_enabled(model_id):
-                        print(f"[SKIP] Model {model_id} auto trading paused")
+                        logger.info(f"SKIP: Model {model_id} auto trading paused")
                         continue
                     
-                    print(f"\n[EXEC] Model {model_id}")
+                    logger.info(f"\nEXEC: Model {model_id}")
                     result = engine.execute_trading_cycle()
                     
                     if result.get('success'):
-                        print(f"[OK] Model {model_id} completed")
+                        logger.info(f"OK: Model {model_id} completed")
                         if result.get('executions'):
                             for exec_result in result['executions']:
                                 signal = exec_result.get('signal', 'unknown')
                                 coin = exec_result.get('coin', 'unknown')
                                 msg = exec_result.get('message', '')
                                 if signal != 'hold':
-                                    print(f"  [TRADE] {coin}: {msg}")
+                                    logger.info(f"  TRADE: {coin}: {msg}")
                     else:
                         error = result.get('error', 'Unknown error')
-                        print(f"[WARN] Model {model_id} failed: {error}")
+                        logger.warning(f"Model {model_id} failed: {error}")
                         
                 except Exception as e:
-                    print(f"[ERROR] Model {model_id} exception: {e}")
+                    logger.error(f"Model {model_id} exception: {e}")
                     import traceback
-                    print(traceback.format_exc())
+                    logger.error(traceback.format_exc())
                     continue
             
             interval_seconds = get_trading_interval_seconds()
             interval_minutes = interval_seconds / 60
-            print(f"\n{'='*60}")
-            print(f"[SLEEP] Waiting {interval_minutes:.1f} minute(s) for next cycle")
-            print(f"{'='*60}\n")
+            logger.info(f"\n{'='*60}")
+            logger.info(f"SLEEP: Waiting {interval_minutes:.1f} minute(s) for next cycle")
+            logger.info(f"{'='*60}\n")
             
             time.sleep(interval_seconds)
             
         except Exception as e:
-            print(f"\n[CRITICAL] Trading loop error: {e}")
+            logger.critical(f"\nTrading loop error: {e}")
             import traceback
-            print(traceback.format_exc())
-            print("[RETRY] Retrying in 60 seconds\n")
+            logger.critical(traceback.format_exc())
+            logger.info("RETRY: Retrying in 60 seconds\n")
             time.sleep(60)
     
-    print("[INFO] Trading loop stopped")
+    logger.info("Trading loop stopped")
 
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
@@ -581,10 +614,10 @@ def init_trading_engines():
         models = db.get_all_models()
 
         if not models:
-            print("[WARN] No trading models found")
+            logger.warning("No trading models found")
             return
 
-        print(f"\n[INIT] Initializing trading engines...")
+        logger.info(f"\nINIT: Initializing trading engines...")
         for model in models:
             model_id = model['id']
             model_name = model['name']
@@ -593,7 +626,7 @@ def init_trading_engines():
                 # Get provider info
                 provider = db.get_provider(model['provider_id'])
                 if not provider:
-                    print(f"  [WARN] Model {model_id} ({model_name}): Provider not found")
+                    logger.warning(f"  Model {model_id} ({model_name}): Provider not found")
                     continue
 
                 trading_engines[model_id] = TradingEngine(
@@ -608,42 +641,42 @@ def init_trading_engines():
                     ),
                     trade_fee_rate=TRADE_FEE_RATE
                 )
-                print(f"  [OK] Model {model_id} ({model_name})")
+                logger.info(f"  OK: Model {model_id} ({model_name})")
             except Exception as e:
-                print(f"  [ERROR] Model {model_id} ({model_name}): {e}")
+                logger.error(f"  Model {model_id} ({model_name}): {e}")
                 continue
 
-        print(f"[INFO] Initialized {len(trading_engines)} engine(s)\n")
+        logger.info(f"Initialized {len(trading_engines)} engine(s)\n")
 
     except Exception as e:
-        print(f"[ERROR] Init engines failed: {e}\n")
+        logger.error(f"Init engines failed: {e}\n")
 
 if __name__ == '__main__':
     import webbrowser
     import os
     
-    print("\n" + "=" * 60)
-    print("AICoinTrade - Starting...")
-    print("=" * 60)
-    print("[INFO] Initializing database...")
+    logger.info("\n" + "=" * 60)
+    logger.info("AICoinTrade - Starting...")
+    logger.info("=" * 60)
+    logger.info("Initializing database...")
     
     db.init_db()
     
-    print("[INFO] Database initialized")
-    print("[INFO] Initializing trading engines...")
+    logger.info("Database initialized")
+    logger.info("Initializing trading engines...")
     
     init_trading_engines()
     
     if auto_trading:
         trading_thread = threading.Thread(target=trading_loop, daemon=True)
         trading_thread.start()
-        print("[INFO] Auto-trading enabled")
+        logger.info("Auto-trading enabled")
     
-    print("\n" + "=" * 60)
-    print("AICoinTrade is running!")
-    print("Server: http://localhost:5002")
-    print("Press Ctrl+C to stop")
-    print("=" * 60 + "\n")
+    logger.info("\n" + "=" * 60)
+    logger.info("AICoinTrade is running!")
+    logger.info("Server: http://localhost:5002")
+    logger.info("Press Ctrl+C to stop")
+    logger.info("=" * 60 + "\n")
     
     # 自动打开浏览器
     def open_browser():
@@ -651,9 +684,9 @@ if __name__ == '__main__':
         url = "http://localhost:5002"
         try:
             webbrowser.open(url)
-            print(f"[INFO] Browser opened: {url}")
+            logger.info(f"Browser opened: {url}")
         except Exception as e:
-            print(f"[WARN] Could not open browser: {e}")
+            logger.warning(f"Could not open browser: {e}")
     
     browser_thread = threading.Thread(target=open_browser, daemon=True)
     browser_thread.start()

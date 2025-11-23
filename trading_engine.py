@@ -1,6 +1,9 @@
 from datetime import datetime
 from typing import Dict
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TradingEngine:
     def __init__(self, model_id: int, db, market_fetcher, ai_trader, trade_fee_rate: float = 0.001):
@@ -73,9 +76,9 @@ class TradingEngine:
             }
             
         except Exception as e:
-            print(f"[ERROR] Trading cycle failed (Model {self.model_id}): {e}")
+            logger.error(f"Trading cycle failed (Model {self.model_id}): {e}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'error': str(e)
@@ -184,20 +187,20 @@ class TradingEngine:
                 self.model_id, symbol, quantity, price, leverage, 'long'
             )
         except Exception as db_err:
-            print(f"[TRADE][ERROR] Update position failed (BUY) model={self.model_id} coin={symbol}: {db_err}")
+            logger.error(f"TRADE: Update position failed (BUY) model={self.model_id} coin={symbol}: {db_err}")
             raise
         
         # 记录交易（包含交易费）
-        print(f"[TRADE][PENDING] Model {self.model_id} BUY {symbol} qty={quantity} price={price} fee={trade_fee}")
+        logger.info(f"TRADE: PENDING - Model {self.model_id} BUY {symbol} qty={quantity} price={price} fee={trade_fee}")
         try:
             self.db.add_trade(
                 self.model_id, symbol, 'buy_to_enter', quantity, 
                 price, leverage, 'long', pnl=0, fee=trade_fee  # 新增fee参数
             )
         except Exception as db_err:
-            print(f"[TRADE][ERROR] Add trade failed (BUY) model={self.model_id} coin={symbol}: {db_err}")
+            logger.error(f"TRADE: Add trade failed (BUY) model={self.model_id} coin={symbol}: {db_err}")
             raise
-        print(f"[TRADE][RECORDED] Model {self.model_id} BUY {symbol}")
+        logger.info(f"TRADE: RECORDED - Model {self.model_id} BUY {symbol}")
         
         return {
             'coin': symbol,
@@ -240,20 +243,20 @@ class TradingEngine:
         try:
             self.db.close_position(self.model_id, symbol, side)
         except Exception as db_err:
-            print(f"[TRADE][ERROR] Close position failed model={self.model_id} coin={symbol}: {db_err}")
+            logger.error(f"TRADE: Close position failed model={self.model_id} coin={symbol}: {db_err}")
             raise
         
         # 记录平仓交易（包含费用和净利润）
-        print(f"[TRADE][PENDING] Model {self.model_id} CLOSE {symbol} side={side} qty={quantity} price={current_price} fee={trade_fee} net_pnl={net_pnl}")
+        logger.info(f"TRADE: PENDING - Model {self.model_id} CLOSE {symbol} side={side} qty={quantity} price={current_price} fee={trade_fee} net_pnl={net_pnl}")
         try:
             self.db.add_trade(
                 self.model_id, symbol, 'close_position', quantity,
                 current_price, position['leverage'], side, pnl=net_pnl, fee=trade_fee  # 新增fee参数
             )
         except Exception as db_err:
-            print(f"[TRADE][ERROR] Add trade failed (CLOSE) model={self.model_id} coin={symbol}: {db_err}")
+            logger.error(f"TRADE: Add trade failed (CLOSE) model={self.model_id} coin={symbol}: {db_err}")
             raise
-        print(f"[TRADE][RECORDED] Model {self.model_id} CLOSE {symbol}")
+        logger.info(f"TRADE: RECORDED - Model {self.model_id} CLOSE {symbol}")
         
         return {
             'coin': symbol,

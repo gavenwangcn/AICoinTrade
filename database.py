@@ -3,6 +3,7 @@ Database management module
 """
 import sqlite3
 import json
+import logging
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -10,6 +11,8 @@ try:
     import config as app_config
 except ImportError:  # pragma: no cover - fallback for environments without config.py
     import config_example as app_config
+
+logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self, db_path: str = 'trading_bot.db'):
@@ -585,7 +588,7 @@ class Database:
             conn.close()
             return True
         except Exception as e:
-            print(f"Error updating settings: {e}")
+            logger.error(f"Error updating settings: {e}")
             conn.close()
             return False
 
@@ -698,7 +701,7 @@ class Database:
             conn.commit()
             return cursor.rowcount > 0
         except Exception as exc:
-            print(f"[ERROR] Failed to update auto trading flag for model {model_id}: {exc}")
+            logger.error(f"Failed to update auto trading flag for model {model_id}: {exc}")
             return False
         finally:
             conn.close()

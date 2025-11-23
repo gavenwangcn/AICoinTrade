@@ -1,6 +1,9 @@
 import json
+import logging
 from typing import Dict, Optional, Tuple
 from openai import OpenAI, APIConnectionError, APIError
+
+logger = logging.getLogger(__name__)
 
 class AITrader:
     def __init__(self, provider_type: str, api_key: str, api_url: str, model_name: str):
@@ -146,17 +149,17 @@ class AITrader:
             
         except APIConnectionError as e:
             error_msg = f"API connection failed: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            logger.error(f"OpenAI API: {error_msg}")
             raise Exception(error_msg)
         except APIError as e:
             error_msg = f"API error ({e.status_code}): {e.message}"
-            print(f"[ERROR] {error_msg}")
+            logger.error(f"OpenAI API: {error_msg}")
             raise Exception(error_msg)
         except Exception as e:
             error_msg = f"OpenAI API call failed: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            logger.error(f"OpenAI API: {error_msg}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             raise Exception(error_msg)
     
     def _call_anthropic_api(self, prompt: str) -> str:
@@ -195,9 +198,9 @@ class AITrader:
             
         except Exception as e:
             error_msg = f"Anthropic API call failed: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            logger.error(f"Anthropic API: {error_msg}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             raise Exception(error_msg)
     
     def _call_gemini_api(self, prompt: str) -> str:
@@ -239,9 +242,9 @@ class AITrader:
             
         except Exception as e:
             error_msg = f"Gemini API call failed: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            logger.error(f"Gemini API: {error_msg}")
             import traceback
-            print(traceback.format_exc())
+            logger.error(traceback.format_exc())
             raise Exception(error_msg)
     
     
@@ -265,8 +268,8 @@ class AITrader:
             else:
                 decisions = {}
         except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON parse failed: {e}")
-            print(f"[DATA] Response:\n{response}")
+            logger.error(f"JSON parse failed: {e}")
+            logger.debug(f"Response data:\n{response}")
             decisions = {}
         
         if not isinstance(decisions, dict):
