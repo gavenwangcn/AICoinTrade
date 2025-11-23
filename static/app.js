@@ -1,3 +1,210 @@
+// 前端日志工具类 - 仅输出到浏览器console
+class FrontendLogger {
+    constructor() {
+        // 从localStorage读取日志开关状态，默认为开启
+        this.enabled = localStorage.getItem('frontendLoggingEnabled') !== 'false';
+        this.updateButtonState();
+    }
+
+    /**
+     * 开启日志
+     */
+    enable() {
+        this.enabled = true;
+        localStorage.setItem('frontendLoggingEnabled', 'true');
+        this.updateButtonState();
+        console.log('[日志系统] 日志输出已开启');
+    }
+
+    /**
+     * 关闭日志
+     */
+    disable() {
+        this.enabled = false;
+        localStorage.setItem('frontendLoggingEnabled', 'false');
+        this.updateButtonState();
+        console.log('[日志系统] 日志输出已关闭');
+    }
+
+    /**
+     * 切换日志状态
+     */
+    toggle() {
+        if (this.enabled) {
+            this.disable();
+        } else {
+            this.enable();
+        }
+    }
+
+    /**
+     * 检查日志是否启用
+     * @returns {boolean}
+     */
+    isEnabled() {
+        return this.enabled;
+    }
+
+    /**
+     * 更新按钮状态
+     */
+    updateButtonState() {
+        const btn = document.getElementById('logToggleBtn');
+        const icon = document.getElementById('logToggleIcon');
+        if (btn && icon) {
+            if (this.enabled) {
+                btn.classList.add('active');
+                btn.title = '点击关闭日志输出';
+                icon.className = 'bi bi-terminal-fill';
+            } else {
+                btn.classList.remove('active');
+                btn.title = '点击开启日志输出';
+                icon.className = 'bi bi-terminal';
+            }
+        }
+    }
+
+    /**
+     * 格式化时间戳
+     */
+    formatTimestamp() {
+        const now = new Date();
+        return now.toLocaleString('zh-CN', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit',
+            hour12: false 
+        });
+    }
+
+    /**
+     * 记录API调用
+     * @param {string} method - HTTP方法
+     * @param {string} url - API URL
+     * @param {object} options - 请求选项（可选）
+     */
+    logApiCall(method, url, options = {}) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        console.log(`[${timestamp}] [API调用] ${method} ${url}`, options.body ? { body: options.body } : '');
+    }
+
+    /**
+     * 记录API成功响应
+     * @param {string} method - HTTP方法
+     * @param {string} url - API URL
+     * @param {Response} response - 响应对象
+     * @param {object} data - 响应数据（可选）
+     */
+    logApiSuccess(method, url, response, data = null) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        const logData = {
+            status: response.status,
+            statusText: response.statusText
+        };
+        if (data) {
+            logData.dataSize = JSON.stringify(data).length;
+        }
+        console.log(`[${timestamp}] [API成功] ${method} ${url}`, logData);
+    }
+
+    /**
+     * 记录API错误
+     * @param {string} method - HTTP方法
+     * @param {string} url - API URL
+     * @param {Error|object} error - 错误对象
+     * @param {Response} response - 响应对象（如果有）
+     * @param {object} errorData - 错误响应数据（如果有）
+     */
+    logApiError(method, url, error, response = null, errorData = null) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        const errorInfo = {
+            method: method,
+            url: url,
+            errorType: error.constructor?.name || 'Error',
+            errorMessage: error.message || String(error)
+        };
+
+        if (response) {
+            errorInfo.status = response.status;
+            errorInfo.statusText = response.statusText;
+        }
+
+        if (errorData) {
+            errorInfo.errorData = errorData;
+        }
+
+        if (error.stack) {
+            errorInfo.stack = error.stack;
+        }
+
+        console.error(`[${timestamp}] [API错误] ${method} ${url}`, errorInfo);
+    }
+
+    /**
+     * 记录数据加载错误
+     * @param {string} dataType - 数据类型
+     * @param {Error} error - 错误对象
+     * @param {string} url - API URL（可选）
+     */
+    logDataLoadError(dataType, error, url = null) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        const errorInfo = {
+            dataType: dataType,
+            errorMessage: error.message || String(error),
+            errorType: error.constructor?.name || 'Error'
+        };
+        if (url) {
+            errorInfo.url = url;
+        }
+        if (error.stack) {
+            errorInfo.stack = error.stack;
+        }
+        console.error(`[${timestamp}] [数据加载错误] ${dataType}`, errorInfo);
+    }
+
+    /**
+     * 记录一般信息
+     * @param {string} category - 日志分类
+     * @param {string} message - 消息
+     * @param {object} details - 详细信息（可选）
+     */
+    logInfo(category, message, details = null) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        if (details) {
+            console.log(`[${timestamp}] [${category}] ${message}`, details);
+        } else {
+            console.log(`[${timestamp}] [${category}] ${message}`);
+        }
+    }
+
+    /**
+     * 记录警告信息
+     * @param {string} category - 日志分类
+     * @param {string} message - 消息
+     * @param {object} details - 详细信息（可选）
+     */
+    logWarn(category, message, details = null) {
+        if (!this.enabled) return;
+        const timestamp = this.formatTimestamp();
+        if (details) {
+            console.warn(`[${timestamp}] [${category}] ${message}`, details);
+        } else {
+            console.warn(`[${timestamp}] [${category}] ${message}`);
+        }
+    }
+}
+
+// 创建全局日志实例
+const frontendLogger = new FrontendLogger();
+
 class TradingApp {
     constructor() {
         this.currentModelId = null;
@@ -13,6 +220,7 @@ class TradingApp {
         this.showSystemPrompt = false;
         this.settingsCache = null;
         this.latestConversations = [];
+        this.logger = frontendLogger; // 使用全局日志实例
         this.init();
     }
 
@@ -61,20 +269,37 @@ class TradingApp {
         executeBtn.disabled = true;
         executeBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> 执行中...';
 
+        const url = `/api/models/${this.currentModelId}/execute`;
+        this.logger.logApiCall('POST', url);
+
         try {
-            const response = await fetch(`/api/models/${this.currentModelId}/execute`, {
+            const response = await fetch(url, {
                 method: 'POST'
             });
-            const data = await response.json();
 
-            if (!response.ok || data.error) {
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
+            }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(data.error || `HTTP ${response.status}`), response, data);
+                alert(data.error || '执行失败');
+            } else if (data.error) {
+                this.logger.logWarn('交易执行', `执行返回错误: ${data.error}`, { modelId: this.currentModelId, error: data.error });
                 alert(data.error || '执行失败');
             } else {
+                this.logger.logApiSuccess('POST', url, response, data);
+                this.logger.logInfo('交易执行', '交易周期执行成功', { modelId: this.currentModelId });
                 alert('执行成功，已触发交易周期');
                 await this.loadModelData();
             }
         } catch (error) {
-            console.error('Failed to execute trading cycle:', error);
+            this.logger.logApiError('POST', url, error);
             alert('执行交易失败，请稍后再试');
         } finally {
             executeBtn.innerHTML = originalContent;
@@ -100,23 +325,42 @@ class TradingApp {
             pauseBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> 关闭中...';
         }
 
+        const url = `/api/models/${this.currentModelId}/auto-trading`;
+        this.logger.logApiCall('POST', url, { body: { enabled: false } });
+
         try {
-            const response = await fetch(`/api/models/${this.currentModelId}/auto-trading`, {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: false })
             });
-            const data = await response.json();
 
-            if (!response.ok || data.error) {
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
+            }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(data.error || `HTTP ${response.status}`), response, data);
                 throw new Error(data.error || '关闭失败');
             }
 
+            if (data.error) {
+                this.logger.logWarn('自动交易控制', `关闭自动交易返回错误: ${data.error}`, { modelId: this.currentModelId, error: data.error });
+                throw new Error(data.error || '关闭失败');
+            }
+
+            this.logger.logApiSuccess('POST', url, response, data);
+            this.logger.logInfo('自动交易控制', '自动交易已关闭', { modelId: this.currentModelId });
             this.currentModelAutoTradingEnabled = false;
             alert('该模型的自动化交易已关闭');
             await this.loadModelData();
         } catch (error) {
-            console.error('Failed to pause auto trading:', error);
+            this.logger.logApiError('POST', url, error);
             alert(error.message || '关闭自动化交易失败');
         } finally {
             if (pauseBtn) {
@@ -222,6 +466,8 @@ class TradingApp {
     }
 
     init() {
+        // 初始化日志按钮状态
+        this.logger.updateButtonState();
         this.initEventListeners();
         this.loadModels();
         this.loadMarketPrices();
@@ -230,9 +476,26 @@ class TradingApp {
     }
 
     async loadSettingsCache() {
+        const url = '/api/settings';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/settings');
-            const settings = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let settings;
+            try {
+                settings = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response);
+            
             this.settingsCache = settings;
             this.showSystemPrompt = Boolean(settings.show_system_prompt);
 
@@ -245,7 +508,7 @@ class TradingApp {
                 this.updateConversations(this.latestConversations);
             }
         } catch (error) {
-            console.error('Failed to load settings cache:', error);
+            this.logger.logDataLoadError('设置缓存', error, url);
         }
     }
 
@@ -253,6 +516,14 @@ class TradingApp {
         // Update Modal
         document.getElementById('closeUpdateModalBtn').addEventListener('click', () => this.hideUpdateModal());
         document.getElementById('dismissUpdateBtn').addEventListener('click', () => this.dismissUpdate());
+
+        // Log Toggle Button
+        const logToggleBtn = document.getElementById('logToggleBtn');
+        if (logToggleBtn) {
+            logToggleBtn.addEventListener('click', () => {
+                this.logger.toggle();
+            });
+        }
 
         // API Provider Modal
         document.getElementById('addApiProviderBtn').addEventListener('click', () => this.showApiProviderModal());
@@ -294,9 +565,27 @@ class TradingApp {
     }
 
     async loadModels() {
+        const url = '/api/models';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/models');
-            const models = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let models;
+            try {
+                models = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, models);
+            this.logger.logInfo('数据加载', `成功加载${models.length}个模型`, { count: models.length });
+            
             this.renderModels(models);
 
             // Initialize with aggregated view if no model is selected
@@ -304,7 +593,7 @@ class TradingApp {
                 this.showAggregatedView();
             }
         } catch (error) {
-            console.error('Failed to load models:', error);
+            this.logger.logDataLoadError('模型列表', error, url);
         }
     }
 
@@ -371,21 +660,67 @@ class TradingApp {
     async loadModelData() {
         if (!this.currentModelId) return;
 
+        const portfolioUrl = `/api/models/${this.currentModelId}/portfolio`;
+        const tradesUrl = `/api/models/${this.currentModelId}/trades?limit=50`;
+        const conversationsUrl = `/api/models/${this.currentModelId}/conversations?limit=20`;
+
+        this.logger.logApiCall('GET', portfolioUrl);
+        this.logger.logApiCall('GET', tradesUrl);
+        this.logger.logApiCall('GET', conversationsUrl);
+
         try {
             const [portfolioResponse, tradesResponse, conversationsResponse] = await Promise.all([
-                fetch(`/api/models/${this.currentModelId}/portfolio`),
-                fetch(`/api/models/${this.currentModelId}/trades?limit=50`),
-                fetch(`/api/models/${this.currentModelId}/conversations?limit=20`)
+                fetch(portfolioUrl),
+                fetch(tradesUrl),
+                fetch(conversationsUrl)
             ]);
 
             // Parse responses with error handling
-            const portfolioPayload = portfolioResponse.ok ? await portfolioResponse.json() : { error: 'Failed to load portfolio' };
-            const trades = tradesResponse.ok ? await tradesResponse.json() : [];
-            const conversations = conversationsResponse.ok ? await conversationsResponse.json() : [];
+            let portfolioPayload, trades, conversations;
+
+            try {
+                if (portfolioResponse.ok) {
+                    portfolioPayload = await portfolioResponse.json();
+                    this.logger.logApiSuccess('GET', portfolioUrl, portfolioResponse);
+                } else {
+                    const errorData = await portfolioResponse.json().catch(() => ({ error: `HTTP ${portfolioResponse.status}` }));
+                    this.logger.logApiError('GET', portfolioUrl, new Error(errorData.error || '加载持仓失败'), portfolioResponse, errorData);
+                    portfolioPayload = { error: errorData.error || 'Failed to load portfolio' };
+                }
+            } catch (error) {
+                this.logger.logApiError('GET', portfolioUrl, error, portfolioResponse);
+                portfolioPayload = { error: error.message };
+            }
+
+            try {
+                if (tradesResponse.ok) {
+                    trades = await tradesResponse.json();
+                    this.logger.logApiSuccess('GET', tradesUrl, tradesResponse);
+                } else {
+                    this.logger.logApiError('GET', tradesUrl, new Error(`HTTP ${tradesResponse.status}`), tradesResponse);
+                    trades = [];
+                }
+            } catch (error) {
+                this.logger.logApiError('GET', tradesUrl, error, tradesResponse);
+                trades = [];
+            }
+
+            try {
+                if (conversationsResponse.ok) {
+                    conversations = await conversationsResponse.json();
+                    this.logger.logApiSuccess('GET', conversationsUrl, conversationsResponse);
+                } else {
+                    this.logger.logApiError('GET', conversationsUrl, new Error(`HTTP ${conversationsResponse.status}`), conversationsResponse);
+                    conversations = [];
+                }
+            } catch (error) {
+                this.logger.logApiError('GET', conversationsUrl, error, conversationsResponse);
+                conversations = [];
+            }
 
             // Check for errors in portfolio
             if (portfolioPayload.error) {
-                console.error('Portfolio error:', portfolioPayload.error);
+                this.logger.logDataLoadError('持仓数据', new Error(portfolioPayload.error), portfolioUrl);
                 return;
             }
 
@@ -396,9 +731,16 @@ class TradingApp {
 
             // Check if portfolio data exists
             if (!portfolio) {
-                console.error('Portfolio data is missing');
+                this.logger.logDataLoadError('持仓数据', new Error('持仓数据为空'), portfolioUrl);
                 return;
             }
+
+            this.logger.logInfo('数据加载', '成功加载模型数据', {
+                modelId: this.currentModelId,
+                positionsCount: (portfolio.positions || []).length,
+                tradesCount: (trades || []).length,
+                conversationsCount: (conversations || []).length
+            });
 
             this.updateStats(portfolio, false);
             this.updateSingleModelChart(account_value_history, portfolio.total_value);
@@ -406,15 +748,35 @@ class TradingApp {
             this.updateTrades(trades || []);
             this.updateConversations(conversations || []);
         } catch (error) {
-            console.error('Failed to load model data:', error);
+            this.logger.logDataLoadError('模型数据', error);
             this.updateAutoTradingButtonState();
         }
     }
 
     async loadAggregatedData() {
+        const url = '/api/aggregated/portfolio';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/aggregated/portfolio');
-            const data = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, data);
+            this.logger.logInfo('数据加载', '成功加载聚合数据', {
+                modelCount: data.model_count || 0,
+                chartDataPoints: (data.chart_data || []).length
+            });
 
             this.updateStats(data.portfolio, true);
             this.updateMultiModelChart(data.chart_data);
@@ -422,7 +784,7 @@ class TradingApp {
             this.hideTabsInAggregatedView();
             this.updateAutoTradingButtonState();
         } catch (error) {
-            console.error('Failed to load aggregated data:', error);
+            this.logger.logDataLoadError('聚合数据', error, url);
             this.updateAutoTradingButtonState();
         }
     }
@@ -841,12 +1203,32 @@ class TradingApp {
     }
 
     async loadMarketPrices() {
+        const url = '/api/market/prices';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/market/prices');
-            const prices = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let prices;
+            try {
+                prices = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, prices);
+            this.logger.logInfo('数据加载', `成功加载市场价格，共${Object.keys(prices).length}个币种`, {
+                coinCount: Object.keys(prices).length
+            });
+            
             this.renderMarketPrices(prices);
         } catch (error) {
-            console.error('Failed to load market prices:', error);
+            this.logger.logDataLoadError('市场价格', error, url);
         }
     }
 
@@ -909,20 +1291,39 @@ class TradingApp {
             return;
         }
 
+        const url = '/api/providers';
+        this.logger.logApiCall('POST', url, { body: data });
+
         try {
-            const response = await fetch('/api/providers', {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
 
-            if (response.ok) {
-                this.hideApiProviderModal();
-                this.loadProviders();
-                alert('API提供方保存成功');
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '保存API提供方失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('POST', url, response, result);
+            this.logger.logInfo('API提供方', 'API提供方保存成功', { providerName: data.name });
+            
+            this.hideApiProviderModal();
+            this.loadProviders();
+            alert('API提供方保存成功');
         } catch (error) {
-            console.error('Failed to save provider:', error);
+            this.logger.logApiError('POST', url, error);
             alert('保存API提供方失败');
         }
     }
@@ -941,26 +1342,46 @@ class TradingApp {
         fetchBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> 获取中...';
         fetchBtn.disabled = true;
 
+        const url = '/api/providers/models';
+        this.logger.logApiCall('POST', url, { body: { api_url: apiUrl } });
+
         try {
-            const response = await fetch('/api/providers/models', {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_url: apiUrl, api_key: apiKey })
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.models && data.models.length > 0) {
-                    document.getElementById('availableModels').value = data.models.join(', ');
-                    alert(`成功获取 ${data.models.length} 个模型`);
-                } else {
-                    alert('未获取到模型列表，请手动输入');
-                }
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
+            }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(data.error || `HTTP ${response.status}`), response, data);
+                alert(data.error || '获取模型列表失败，请检查API地址和密钥');
+                return;
+            }
+
+            this.logger.logApiSuccess('POST', url, response, data);
+
+            if (data.models && data.models.length > 0) {
+                this.logger.logInfo('模型获取', `成功获取${data.models.length}个模型`, { 
+                    modelCount: data.models.length,
+                    apiUrl: apiUrl 
+                });
+                document.getElementById('availableModels').value = data.models.join(', ');
+                alert(`成功获取 ${data.models.length} 个模型`);
             } else {
-                alert('获取模型列表失败，请检查API地址和密钥');
+                this.logger.logWarn('模型获取', '未获取到模型列表', { apiUrl: apiUrl });
+                alert('未获取到模型列表，请手动输入');
             }
         } catch (error) {
-            console.error('Failed to fetch models:', error);
+            this.logger.logApiError('POST', url, error);
             alert('获取模型列表失败');
         } finally {
             fetchBtn.innerHTML = originalText;
@@ -969,14 +1390,32 @@ class TradingApp {
     }
 
     async loadProviders() {
+        const url = '/api/providers';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/providers');
-            const providers = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let providers;
+            try {
+                providers = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, providers);
+            this.logger.logInfo('数据加载', `成功加载${providers.length}个API提供方`, { count: providers.length });
+            
             this.providers = providers;
             this.renderProviders(providers);
             this.updateModelProviderSelect(providers);
         } catch (error) {
-            console.error('Failed to load providers:', error);
+            this.logger.logDataLoadError('API提供方列表', error, url);
         }
     }
 
@@ -1057,16 +1496,33 @@ class TradingApp {
     async deleteProvider(providerId) {
         if (!confirm('确定要删除这个API提供方吗？')) return;
 
+        const url = `/api/providers/${providerId}`;
+        this.logger.logApiCall('DELETE', url);
+
         try {
-            const response = await fetch(`/api/providers/${providerId}`, {
+            const response = await fetch(url, {
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                this.loadProviders();
+            let result;
+            try {
+                result = await response.json().catch(() => ({}));
+            } catch (parseError) {
+                // DELETE可能没有响应体，忽略解析错误
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('DELETE', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '删除API提供方失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('DELETE', url, response);
+            this.logger.logInfo('API提供方', 'API提供方删除成功', { providerId: providerId });
+            this.loadProviders();
         } catch (error) {
-            console.error('Failed to delete provider:', error);
+            this.logger.logApiError('DELETE', url, error);
+            alert('删除API提供方失败');
         }
     }
 
@@ -1091,25 +1547,48 @@ class TradingApp {
             return;
         }
 
+        const url = '/api/models';
+        const requestData = {
+            provider_id: providerId,
+            model_name: modelName,
+            name: displayName,
+            initial_capital: initialCapital
+        };
+        this.logger.logApiCall('POST', url, { body: requestData });
+
         try {
-            const response = await fetch('/api/models', {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    provider_id: providerId,
-                    model_name: modelName,
-                    name: displayName,
-                    initial_capital: initialCapital
-                })
+                body: JSON.stringify(requestData)
             });
 
-            if (response.ok) {
-                this.hideModal();
-                this.loadModels();
-                this.clearForm();
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '添加模型失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('POST', url, response, result);
+            this.logger.logInfo('模型管理', '模型添加成功', { 
+                modelId: result.id,
+                modelName: displayName 
+            });
+
+            this.hideModal();
+            this.loadModels();
+            this.clearForm();
         } catch (error) {
-            console.error('Failed to add model:', error);
+            this.logger.logApiError('POST', url, error);
             alert('添加模型失败');
         }
     }
@@ -1117,21 +1596,39 @@ class TradingApp {
     async deleteModel(modelId) {
         if (!confirm('确定要删除这个模型吗？')) return;
 
+        const url = `/api/models/${modelId}`;
+        this.logger.logApiCall('DELETE', url);
+
         try {
-            const response = await fetch(`/api/models/${modelId}`, {
+            const response = await fetch(url, {
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                if (this.currentModelId === modelId) {
-                    this.currentModelId = null;
-                    this.showAggregatedView();
-                } else {
-                    this.loadModels();
-                }
+            let result;
+            try {
+                result = await response.json().catch(() => ({}));
+            } catch (parseError) {
+                // DELETE可能没有响应体，忽略解析错误
+            }
+
+            if (!response.ok) {
+                this.logger.logApiError('DELETE', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '删除模型失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('DELETE', url, response);
+            this.logger.logInfo('模型管理', '模型删除成功', { modelId: modelId });
+
+            if (this.currentModelId === modelId) {
+                this.currentModelId = null;
+                this.showAggregatedView();
+            } else {
+                this.loadModels();
             }
         } catch (error) {
-            console.error('Failed to delete model:', error);
+            this.logger.logApiError('DELETE', url, error);
+            alert('删除模型失败');
         }
     }
 
@@ -1173,9 +1670,26 @@ class TradingApp {
     }
 
     async showSettingsModal() {
+        const url = '/api/settings';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/settings');
-            const settings = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let settings;
+            try {
+                settings = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response);
 
             document.getElementById('tradingFrequency').value = settings.trading_frequency_minutes;
             document.getElementById('tradingFeeRate').value = settings.trading_fee_rate;
@@ -1200,7 +1714,7 @@ class TradingApp {
 
             document.getElementById('settingsModal').classList.add('show');
         } catch (error) {
-            console.error('Failed to load settings:', error);
+            this.logger.logDataLoadError('设置', error, url);
             alert('加载设置失败');
         }
     }
@@ -1227,12 +1741,30 @@ class TradingApp {
     }
 
     async loadCoins() {
+        const url = '/api/coins';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/coins');
-            const coins = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let coins;
+            try {
+                coins = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, coins);
+            this.logger.logInfo('数据加载', `成功加载${coins.length}个虚拟币配置`, { count: coins.length });
+            
             this.renderCoins(coins);
         } catch (error) {
-            console.error('Failed to load coins:', error);
+            this.logger.logDataLoadError('虚拟币配置', error, url);
         }
     }
 
@@ -1271,24 +1803,43 @@ class TradingApp {
             return;
         }
 
+        const url = '/api/coins';
+        this.logger.logApiCall('POST', url, { body: data });
+
         try {
-            const response = await fetch('/api/coins', {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
 
-            if (response.ok) {
-                this.clearCoinForm();
-                this.loadCoins();
-                this.refresh();
-                alert('虚拟币保存成功');
-            } else {
-                const error = await response.json();
-                alert(error.error || '保存虚拟币失败');
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('POST', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('POST', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '保存虚拟币失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('POST', url, response, result);
+            this.logger.logInfo('虚拟币配置', '虚拟币保存成功', { 
+                coinId: result.id,
+                symbol: data.symbol 
+            });
+
+            this.clearCoinForm();
+            this.loadCoins();
+            this.refresh();
+            alert('虚拟币保存成功');
         } catch (error) {
-            console.error('Failed to save coin:', error);
+            this.logger.logApiError('POST', url, error);
             alert('保存虚拟币失败');
         }
     }
@@ -1296,17 +1847,35 @@ class TradingApp {
     async deleteCoin(coinId) {
         if (!confirm('确定要删除该虚拟币吗？')) return;
 
+        const url = `/api/coins/${coinId}`;
+        this.logger.logApiCall('DELETE', url);
+
         try {
-            const response = await fetch(`/api/coins/${coinId}`, {
+            const response = await fetch(url, {
                 method: 'DELETE'
             });
 
-            if (response.ok) {
-                this.loadCoins();
-                this.refresh();
+            let result;
+            try {
+                result = await response.json().catch(() => ({}));
+            } catch (parseError) {
+                // DELETE可能没有响应体，忽略解析错误
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('DELETE', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '删除虚拟币失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('DELETE', url, response);
+            this.logger.logInfo('虚拟币配置', '虚拟币删除成功', { coinId: coinId });
+
+            this.loadCoins();
+            this.refresh();
         } catch (error) {
-            console.error('Failed to delete coin:', error);
+            this.logger.logApiError('DELETE', url, error);
+            alert('删除虚拟币失败');
         }
     }
 
@@ -1340,29 +1909,47 @@ class TradingApp {
             return;
         }
 
+        const url = '/api/settings';
+        const requestData = {
+            trading_frequency_minutes: tradingFrequency,
+            trading_fee_rate: tradingFeeRate,
+            show_system_prompt: showSystemPrompt,
+            auto_trading_start: autoTradingStart,
+            auto_trading_end: autoTradingEnd
+        };
+        this.logger.logApiCall('PUT', url, { body: requestData });
+
         try {
-            const response = await fetch('/api/settings', {
+            const response = await fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    trading_frequency_minutes: tradingFrequency,
-                    trading_fee_rate: tradingFeeRate,
-                    show_system_prompt: showSystemPrompt,
-                    auto_trading_start: autoTradingStart,
-                    auto_trading_end: autoTradingEnd
-                })
+                body: JSON.stringify(requestData)
             });
 
-            if (response.ok) {
-                this.hideSettingsModal();
-                this.showSystemPrompt = showSystemPrompt;
-                this.loadSettingsCache();
-                alert('设置保存成功');
-            } else {
-                alert('保存设置失败');
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('PUT', url, new Error('响应解析失败'), response);
+                alert('响应解析失败，请稍后再试');
+                return;
             }
+
+            if (!response.ok) {
+                this.logger.logApiError('PUT', url, new Error(result.error || `HTTP ${response.status}`), response, result);
+                alert(result.error || '保存设置失败');
+                return;
+            }
+
+            this.logger.logApiSuccess('PUT', url, response, result);
+            this.logger.logInfo('设置', '设置保存成功', requestData);
+
+            this.hideSettingsModal();
+            this.showSystemPrompt = showSystemPrompt;
+            this.loadSettingsCache();
+            alert('设置保存成功');
         } catch (error) {
-            console.error('Failed to save settings:', error);
+            this.logger.logApiError('PUT', url, error);
             alert('保存设置失败');
         }
     }
@@ -1370,24 +1957,48 @@ class TradingApp {
     // ============ Update Check Methods ============
 
     async checkForUpdates(silent = false) {
+        const url = '/api/check-update';
+        this.logger.logApiCall('GET', url);
+
         try {
-            const response = await fetch('/api/check-update');
-            const data = await response.json();
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                this.logger.logApiError('GET', url, new Error('响应解析失败'), response);
+                if (!silent) {
+                    alert('检查更新失败，请稍后重试');
+                }
+                return;
+            }
+
+            this.logger.logApiSuccess('GET', url, response, data);
 
             if (data.update_available) {
+                this.logger.logInfo('更新检查', '发现新版本', { 
+                    currentVersion: data.current_version,
+                    latestVersion: data.latest_version 
+                });
                 this.showUpdateModal(data);
                 this.showUpdateIndicator();
             } else if (!silent) {
                 if (data.error) {
-                    console.warn('Update check failed:', data.error);
+                    this.logger.logWarn('更新检查', `更新检查失败: ${data.error}`);
                 } else {
+                    this.logger.logInfo('更新检查', '已是最新版本');
                     // Already on latest version
                     this.showUpdateIndicator(true);
                     setTimeout(() => this.hideUpdateIndicator(), 2000);
                 }
             }
         } catch (error) {
-            console.error('Failed to check for updates:', error);
+            this.logger.logApiError('GET', url, error);
             if (!silent) {
                 alert('检查更新失败，请稍后重试');
             }

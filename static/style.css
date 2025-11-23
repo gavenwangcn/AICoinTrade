@@ -221,6 +221,18 @@ body {
     background: rgba(255, 255, 255, 0.95);
 }
 
+.btn-icon.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 10px 20px rgba(51, 112, 255, 0.3);
+}
+
+.btn-icon.active:hover {
+    background: var(--info);
+    box-shadow: 0 15px 25px rgba(22, 93, 255, 0.4);
+}
+
 #refreshBtn {
     background: var(--bg-2);
     border: 1px solid var(--border-1);
