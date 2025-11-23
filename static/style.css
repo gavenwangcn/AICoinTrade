@@ -173,11 +173,10 @@ body {
     border-radius: var(--radius);
     cursor: pointer;
     font-size: 14px;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transform-style: preserve-3d;
 }
 
 .btn-primary {
@@ -188,7 +187,6 @@ body {
 }
 
 .btn-primary:hover {
-    transform: translateY(-3px);
     box-shadow: 0 15px 25px rgba(63, 140, 255, 0.45);
 }
 
@@ -201,50 +199,69 @@ body {
 }
 
 .btn-secondary:hover {
-    transform: translateY(-2px);
     background: rgba(255, 255, 255, 0.95);
 }
 
 .btn-icon {
-    background: rgba(255, 255, 255, 0.75);
+    background: var(--bg-2);
     color: var(--text-2);
     padding: 8px;
     width: 36px;
     height: 36px;
     justify-content: center;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
+    border: 1px solid var(--border-1);
+    box-shadow: none;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-icon:hover {
-    transform: translateY(-3px);
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-3);
+    border-color: var(--border-2);
+    color: var(--primary);
 }
 
 .btn-icon.active {
     background: var(--primary);
     color: white;
     border-color: var(--primary);
-    box-shadow: 0 10px 20px rgba(51, 112, 255, 0.3);
 }
 
 .btn-icon.active:hover {
     background: var(--info);
-    box-shadow: 0 15px 25px rgba(22, 93, 255, 0.4);
+    border-color: var(--info);
 }
 
 #refreshBtn {
     background: var(--bg-2);
     border: 1px solid var(--border-1);
     box-shadow: none;
-    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    transform: none;
 }
 
 #refreshBtn:hover {
     background: var(--bg-3);
     border-color: var(--border-2);
-    transform: none;
+    color: var(--primary);
+}
+
+#refreshBtn:active #refreshIcon {
+    animation: spin 0.6s ease-in-out;
+}
+
+#refreshIcon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+#logToggleBtn {
+    background: var(--bg-2);
+    border: 1px solid var(--border-1);
+    box-shadow: none;
+}
+
+#logToggleBtn:hover {
+    background: var(--bg-3);
+    border-color: var(--border-2);
+    color: var(--primary);
 }
 
 .btn-close {

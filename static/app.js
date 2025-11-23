@@ -55,11 +55,11 @@ class FrontendLogger {
             if (this.enabled) {
                 btn.classList.add('active');
                 btn.title = '点击关闭日志输出';
-                icon.className = 'bi bi-terminal-fill';
+                icon.className = 'bi bi-play-fill'; // 开启状态：前进图标
             } else {
                 btn.classList.remove('active');
                 btn.title = '点击开启日志输出';
-                icon.className = 'bi bi-terminal';
+                icon.className = 'bi bi-pause-fill'; // 关闭状态：暂停图标
             }
         }
     }
@@ -1640,6 +1640,15 @@ class TradingApp {
     }
 
     async refresh() {
+        // 添加旋转动画
+        const refreshIcon = document.getElementById('refreshIcon');
+        if (refreshIcon) {
+            refreshIcon.style.animation = 'spin 0.6s ease-in-out';
+            setTimeout(() => {
+                refreshIcon.style.animation = '';
+            }, 600);
+        }
+
         await Promise.all([
             this.loadModels(),
             this.loadMarketPrices(),
